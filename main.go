@@ -66,6 +66,22 @@ func (s *Server) handleGetAllUsers(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
+func (s *Server) handlgetGetUser(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != "GET" {
+		return writeJSON(
+			w,
+			http.StatusBadRequest,
+			apiError{Err: fmt.Sprintf("%s method not allowed for endpoint /get", r.Method)},
+		)
+	}
+	// get id from request param
+	u, err := s.pgdb.getUser(1)
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, http.StatusOK, u)
+}
+
 func (conn *PostgresDB) getAllUsers() ([]*User, error) {
 	sqlStatement := `
   select * from customer
@@ -89,6 +105,20 @@ func (conn *PostgresDB) getAllUsers() ([]*User, error) {
 	return users, nil
 }
 
+func (conn *PostgresDB) getUser(id int) (*User, error) {
+	u := User{}
+	err := conn.db.QueryRow("select * from customer where id = $1", id).
+		Scan(&u.Id, &u.FirstName, &u.LastName)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, sql.ErrNoRows
+		} else {
+			panic(err)
+		}
+	}
+	return &u, nil
+}
+
 func (conn *PostgresDB) insertUser(u *User) error {
 	sqlStatement := `
   insert into customer (id, first_name, last_name)
@@ -105,9 +135,8 @@ func (conn *PostgresDB) insertUser(u *User) error {
 
 func (server *Server) run() {
 	fmt.Println("Service started on port", server.listenAddr)
-	// handlers here
 	http.Handle("/get", makeHTTPHandler(server.handleGetAllUsers))
-	// start server
+	http.Handle("/getUser", makeHTTPHandler(server.handlgetGetUser))
 	http.ListenAndServe(server.listenAddr, nil)
 }
 
