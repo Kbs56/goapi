@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	_ "github.com/lib/pq"
 )
@@ -67,17 +68,29 @@ func (s *Server) handleGetAllUsers(w http.ResponseWriter, r *http.Request) error
 }
 
 func (s *Server) handlgetGetUser(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.Atoi(r.URL.Query().Get("id"))
+	if err != nil {
+		return writeJSON(
+			w,
+			http.StatusBadRequest,
+			apiError{Err: "Please ensure you are passing in a valid ID"},
+		)
+	}
+	fmt.Println(id)
 	if r.Method != "GET" {
 		return writeJSON(
 			w,
 			http.StatusBadRequest,
-			apiError{Err: fmt.Sprintf("%s method not allowed for endpoint /get", r.Method)},
+			apiError{Err: fmt.Sprintf("Method %s not allowed for endpoint /get", r.Method)},
 		)
 	}
-	// get id from request param
-	u, err := s.pgdb.getUser(1)
+	u, err := s.pgdb.getUser(id)
 	if err != nil {
-		return err
+		if err == sql.ErrNoRows {
+			return writeJSON(w, http.StatusOK, apiError{Err: fmt.Sprintf("No user with ID %d", id)})
+		} else {
+			return err
+		}
 	}
 	return writeJSON(w, http.StatusOK, u)
 }
@@ -133,13 +146,6 @@ func (conn *PostgresDB) insertUser(u *User) error {
 	return nil
 }
 
-func (server *Server) run() {
-	fmt.Println("Service started on port", server.listenAddr)
-	http.Handle("/get", makeHTTPHandler(server.handleGetAllUsers))
-	http.Handle("/getUser", makeHTTPHandler(server.handlgetGetUser))
-	http.ListenAndServe(server.listenAddr, nil)
-}
-
 func ConnectDB() (*PostgresDB, error) {
 	psqlInfo := fmt.Sprintf(
 		"host=%s port=%s user=%s "+
@@ -163,6 +169,13 @@ func ConnectDB() (*PostgresDB, error) {
 	return &PostgresDB{
 		db: db,
 	}, nil
+}
+
+func (server *Server) run() {
+	fmt.Println("Service started on port", server.listenAddr)
+	http.Handle("/getUsers", makeHTTPHandler(server.handleGetAllUsers))
+	http.Handle("/getUser", makeHTTPHandler(server.handlgetGetUser))
+	http.ListenAndServe(server.listenAddr, nil)
 }
 
 func main() {
