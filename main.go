@@ -67,7 +67,29 @@ func (s *Server) handleGetAllUsers(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
-func (s *Server) handlgetGetUser(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) error {
+	body := json.NewDecoder(r.Body)
+	u := &User{}
+	err := body.Decode(u)
+	if err != nil {
+		return writeJSON(
+			w,
+			http.StatusInternalServerError,
+			apiError{Err: "Error occured creating user"},
+		)
+	}
+	u, err = s.pgdb.createUser(u)
+	if err != nil {
+		return writeJSON(
+			w,
+			http.StatusInternalServerError,
+			apiError{Err: "Error occured creating user"},
+		)
+	}
+	return writeJSON(w, http.StatusOK, u)
+}
+
+func (s *Server) handlGetUser(w http.ResponseWriter, r *http.Request) error {
 	id, err := strconv.Atoi(r.URL.Query().Get("id"))
 	if err != nil {
 		return writeJSON(
@@ -76,7 +98,6 @@ func (s *Server) handlgetGetUser(w http.ResponseWriter, r *http.Request) error {
 			apiError{Err: "Please ensure you are passing in a valid ID"},
 		)
 	}
-	fmt.Println(id)
 	if r.Method != "GET" {
 		return writeJSON(
 			w,
@@ -132,6 +153,20 @@ func (conn *PostgresDB) getUser(id int) (*User, error) {
 	return &u, nil
 }
 
+func (conn *PostgresDB) createUser(u *User) (*User, error) {
+	sqlStatement := fmt.Sprintf(
+		"INSERT INTO CUSTOMER (FIRST_NAME, LAST_NAME) VALUES ('%s', '%s') RETURNING ID",
+		u.FirstName,
+		u.LastName,
+	)
+	var id int
+	if err := conn.db.QueryRow(sqlStatement).Scan(&id); err != nil {
+		return nil, err
+	}
+	u.Id = id
+	return u, nil
+}
+
 func (conn *PostgresDB) insertUser(u *User) error {
 	sqlStatement := `
   insert into customer (id, first_name, last_name)
@@ -174,7 +209,8 @@ func ConnectDB() (*PostgresDB, error) {
 func (server *Server) run() {
 	fmt.Println("Service started on port", server.listenAddr)
 	http.Handle("/getUsers", makeHTTPHandler(server.handleGetAllUsers))
-	http.Handle("/getUser", makeHTTPHandler(server.handlgetGetUser))
+	http.Handle("/getUser", makeHTTPHandler(server.handlGetUser))
+	http.Handle("/create", makeHTTPHandler(server.handleCreateUser))
 	http.ListenAndServe(server.listenAddr, nil)
 }
 
