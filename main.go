@@ -131,7 +131,62 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) error 
 			apiError{Err: fmt.Sprintf("Method %s not allowed for endpoint /update", r.Method)},
 		)
 	}
-	return nil
+	id, err := strconv.Atoi(r.URL.Query().Get("id"))
+	if err != nil {
+		return writeJSON(
+			w,
+			http.StatusBadRequest,
+			apiError{Err: "Please ensure you are passing in a valid ID"},
+		)
+	}
+	u := &User{Id: id}
+	err = json.NewDecoder(r.Body).Decode(&u)
+	if err != nil {
+		return writeJSON(
+			w,
+			http.StatusInternalServerError,
+			apiError{Err: "We are experinecing difficulties"},
+		)
+	}
+	u, err = s.pgdb.updateUser(u)
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, http.StatusOK, &u)
+}
+
+func (conn *PostgresDB) updateUser(u *User) (*User, error) {
+	sqlStatement := configureQuery(u)
+	if err := conn.db.QueryRow(sqlStatement).Scan(&u.Id, &u.FirstName, &u.LastName); err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+func configureQuery(u *User) string {
+	if u.LastName == "" && u.FirstName != "" {
+		sqlStatement := fmt.Sprintf(
+			"update customer set first_name = '%s' where id = %d returning id, first_name, last_name",
+			u.FirstName,
+			u.Id,
+		)
+		return sqlStatement
+	} else if u.FirstName == "" && u.LastName != "" {
+		sqlStatement := fmt.Sprintf(
+			"update customer set last_name = '%s' where id = %d returning id, first_name, last_name",
+			u.LastName,
+			u.Id,
+		)
+		return sqlStatement
+	} else {
+		sqlStatement := fmt.Sprintf(
+			"update customer set first_name = '%s', last_name = '%s' where id = %d returning id, first_name, last_name",
+			u.FirstName,
+			u.LastName,
+			u.Id,
+		)
+		return sqlStatement
+	}
 }
 
 func (conn *PostgresDB) getAllUsers() ([]*User, error) {
