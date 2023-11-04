@@ -25,6 +25,7 @@ type User struct {
 	Id        int    `json:"id"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
+	Email     string `json:"email"`
 }
 
 type apiFunc func(http.ResponseWriter, *http.Request) error
@@ -174,12 +175,12 @@ func (conn *PostgresDB) getUser(id int) (*User, error) {
 	return &u, nil
 }
 
-func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleUpdateEmail(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPatch {
 		return writeJSON(
 			w,
 			http.StatusBadRequest,
-			apiError{Err: fmt.Sprintf("Method %s not allowed for endpoint /update", r.Method)},
+			apiError{Err: fmt.Sprintf("Method %s not allowed for endpoint /updateEmail", r.Method)},
 		)
 	}
 	id, err := strconv.Atoi(r.URL.Query().Get("id"))
@@ -199,45 +200,23 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) error 
 			apiError{Err: "We are experinecing difficulties"},
 		)
 	}
-	u, err = s.pgdb.updateUser(u)
+	u, err = s.pgdb.updateEmail(u)
 	if err != nil {
 		return err
 	}
 	return writeJSON(w, http.StatusOK, &u)
 }
 
-func (conn *PostgresDB) updateUser(u *User) (*User, error) {
-	sqlStatement := configureQuery(u)
-	if err := conn.db.QueryRow(sqlStatement).Scan(&u.Id, &u.FirstName, &u.LastName); err != nil {
+func (conn *PostgresDB) updateEmail(u *User) (*User, error) {
+	sqlStatement := fmt.Sprintf(
+		"UPDATE CUSTOMER SET EMAIL = '%s' WHERE ID = %d RETURNING FIRST_NAME, LAST_NAME",
+		u.Email,
+		u.Id,
+	)
+	if err := conn.db.QueryRow(sqlStatement).Scan(&u.FirstName, &u.LastName); err != nil {
 		return nil, err
 	}
 	return u, nil
-}
-
-func configureQuery(u *User) string {
-	if u.LastName == "" && u.FirstName != "" {
-		sqlStatement := fmt.Sprintf(
-			"update customer set first_name = '%s' where id = %d returning id, first_name, last_name",
-			u.FirstName,
-			u.Id,
-		)
-		return sqlStatement
-	} else if u.FirstName == "" && u.LastName != "" {
-		sqlStatement := fmt.Sprintf(
-			"update customer set last_name = '%s' where id = %d returning id, first_name, last_name",
-			u.LastName,
-			u.Id,
-		)
-		return sqlStatement
-	} else {
-		sqlStatement := fmt.Sprintf(
-			"update customer set first_name = '%s', last_name = '%s' where id = %d returning id, first_name, last_name",
-			u.FirstName,
-			u.LastName,
-			u.Id,
-		)
-		return sqlStatement
-	}
 }
 
 func ConnectDB() (*PostgresDB, error) {
@@ -270,7 +249,8 @@ func (server *Server) run() {
 	http.Handle("/create", makeHTTPHandler(server.handleCreateUser))
 	http.Handle("/getUsers", makeHTTPHandler(server.handleGetAllUsers))
 	http.Handle("/getUser", makeHTTPHandler(server.handleGetUser))
-	http.Handle("/update", makeHTTPHandler(server.handleUpdateUser))
+	http.Handle("/updateEmail", makeHTTPHandler(server.handleUpdateEmail))
+	// http.Handle("/delete", makeHTTPHandler(server.handleDeleteUser))
 	http.ListenAndServe(server.listenAddr, nil)
 }
 
