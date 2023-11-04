@@ -67,6 +67,29 @@ func (s *Server) handleGetAllUsers(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
+func (conn *PostgresDB) getAllUsers() ([]*User, error) {
+	sqlStatement := `
+  select * from customer
+  `
+	rows, err := conn.db.Query(sqlStatement)
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	users := []*User{}
+	for rows.Next() {
+		user := &User{}
+		err := rows.Scan(&user.Id, &user.FirstName, &user.LastName)
+		if err != nil {
+			return users, err
+		}
+		users = append(users, user)
+	}
+	return users, nil
+}
+
 func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
 		return writeJSON(
@@ -96,6 +119,20 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) error 
 	return writeJSON(w, http.StatusOK, u)
 }
 
+func (conn *PostgresDB) createUser(u *User) (*User, error) {
+	sqlStatement := fmt.Sprintf(
+		"INSERT INTO CUSTOMER (FIRST_NAME, LAST_NAME) VALUES ('%s', '%s') RETURNING ID",
+		u.FirstName,
+		u.LastName,
+	)
+	var id int
+	if err := conn.db.QueryRow(sqlStatement).Scan(&id); err != nil {
+		return nil, err
+	}
+	u.Id = id
+	return u, nil
+}
+
 func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodGet {
 		return writeJSON(
@@ -121,6 +158,20 @@ func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	return writeJSON(w, http.StatusOK, u)
+}
+
+func (conn *PostgresDB) getUser(id int) (*User, error) {
+	u := User{}
+	err := conn.db.QueryRow("select * from customer where id = $1", id).
+		Scan(&u.Id, &u.FirstName, &u.LastName)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, sql.ErrNoRows
+		} else {
+			panic(err)
+		}
+	}
+	return &u, nil
 }
 
 func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) error {
@@ -187,71 +238,6 @@ func configureQuery(u *User) string {
 		)
 		return sqlStatement
 	}
-}
-
-func (conn *PostgresDB) getAllUsers() ([]*User, error) {
-	sqlStatement := `
-  select * from customer
-  `
-	rows, err := conn.db.Query(sqlStatement)
-	if err != nil {
-		return nil, err
-	}
-
-	defer rows.Close()
-
-	users := []*User{}
-	for rows.Next() {
-		user := &User{}
-		err := rows.Scan(&user.Id, &user.FirstName, &user.LastName)
-		if err != nil {
-			return users, err
-		}
-		users = append(users, user)
-	}
-	return users, nil
-}
-
-func (conn *PostgresDB) getUser(id int) (*User, error) {
-	u := User{}
-	err := conn.db.QueryRow("select * from customer where id = $1", id).
-		Scan(&u.Id, &u.FirstName, &u.LastName)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, sql.ErrNoRows
-		} else {
-			panic(err)
-		}
-	}
-	return &u, nil
-}
-
-func (conn *PostgresDB) createUser(u *User) (*User, error) {
-	sqlStatement := fmt.Sprintf(
-		"INSERT INTO CUSTOMER (FIRST_NAME, LAST_NAME) VALUES ('%s', '%s') RETURNING ID",
-		u.FirstName,
-		u.LastName,
-	)
-	var id int
-	if err := conn.db.QueryRow(sqlStatement).Scan(&id); err != nil {
-		return nil, err
-	}
-	u.Id = id
-	return u, nil
-}
-
-func (conn *PostgresDB) insertUser(u *User) error {
-	sqlStatement := `
-  insert into customer (id, first_name, last_name)
-  values ($1, $2, $3)
-  `
-	_, err := conn.db.Exec(sqlStatement, u.Id, u.FirstName, u.LastName)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println(u, "inserted into database")
-	return nil
 }
 
 func ConnectDB() (*PostgresDB, error) {
