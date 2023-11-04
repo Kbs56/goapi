@@ -52,7 +52,7 @@ func (s *Server) handleGetAllUsers(w http.ResponseWriter, r *http.Request) error
 		return writeJSON(
 			w,
 			http.StatusMethodNotAllowed,
-			apiError{Err: fmt.Sprintf("Method %s not allowed for endpoint /get", r.Method)},
+			apiError{Err: fmt.Sprintf("Method %s not allowed for endpoint /getUsers", r.Method)},
 		)
 	}
 	users, err := s.pgdb.getAllUsers()
@@ -68,6 +68,13 @@ func (s *Server) handleGetAllUsers(w http.ResponseWriter, r *http.Request) error
 }
 
 func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != http.MethodPost {
+		return writeJSON(
+			w,
+			http.StatusBadRequest,
+			apiError{Err: fmt.Sprintf("Method %s not allowed for endpoint /create", r.Method)},
+		)
+	}
 	body := json.NewDecoder(r.Body)
 	u := &User{}
 	err := body.Decode(u)
@@ -89,20 +96,20 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) error 
 	return writeJSON(w, http.StatusOK, u)
 }
 
-func (s *Server) handlGetUser(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != http.MethodGet {
+		return writeJSON(
+			w,
+			http.StatusBadRequest,
+			apiError{Err: fmt.Sprintf("Method %s not allowed for endpoint /getUser", r.Method)},
+		)
+	}
 	id, err := strconv.Atoi(r.URL.Query().Get("id"))
 	if err != nil {
 		return writeJSON(
 			w,
 			http.StatusBadRequest,
 			apiError{Err: "Please ensure you are passing in a valid ID"},
-		)
-	}
-	if r.Method != "GET" {
-		return writeJSON(
-			w,
-			http.StatusBadRequest,
-			apiError{Err: fmt.Sprintf("Method %s not allowed for endpoint /get", r.Method)},
 		)
 	}
 	u, err := s.pgdb.getUser(id)
@@ -114,6 +121,17 @@ func (s *Server) handlGetUser(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	return writeJSON(w, http.StatusOK, u)
+}
+
+func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != http.MethodPatch {
+		return writeJSON(
+			w,
+			http.StatusBadRequest,
+			apiError{Err: fmt.Sprintf("Method %s not allowed for endpoint /update", r.Method)},
+		)
+	}
+	return nil
 }
 
 func (conn *PostgresDB) getAllUsers() ([]*User, error) {
@@ -208,9 +226,10 @@ func ConnectDB() (*PostgresDB, error) {
 
 func (server *Server) run() {
 	fmt.Println("Service started on port", server.listenAddr)
-	http.Handle("/getUsers", makeHTTPHandler(server.handleGetAllUsers))
-	http.Handle("/getUser", makeHTTPHandler(server.handlGetUser))
 	http.Handle("/create", makeHTTPHandler(server.handleCreateUser))
+	http.Handle("/getUsers", makeHTTPHandler(server.handleGetAllUsers))
+	http.Handle("/getUser", makeHTTPHandler(server.handleGetUser))
+	http.Handle("/update", makeHTTPHandler(server.handleUpdateUser))
 	http.ListenAndServe(server.listenAddr, nil)
 }
 
