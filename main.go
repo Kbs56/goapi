@@ -82,7 +82,7 @@ func (conn *PostgresDB) getAllUsers() ([]*User, error) {
 	users := []*User{}
 	for rows.Next() {
 		user := &User{}
-		err := rows.Scan(&user.Id, &user.FirstName, &user.LastName)
+		err := rows.Scan(&user.Id, &user.FirstName, &user.LastName, &user.Email)
 		if err != nil {
 			return users, err
 		}
@@ -122,7 +122,7 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) error 
 
 func (conn *PostgresDB) createUser(u *User) (*User, error) {
 	sqlStatement := fmt.Sprintf(
-		"INSERT INTO CUSTOMER (FIRST_NAME, LAST_NAME, EMAIL) VALUES ('%s', '%s', '%s') RETURNING ID",
+		"INSERT INTO CUSTOMER (FIRST_NAME, LAST_NAME, EMAIL_ADDRESS) VALUES ('%s', '%s', '%s') RETURNING ID",
 		u.FirstName,
 		u.LastName,
 		u.Email,
@@ -165,7 +165,7 @@ func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) error {
 func (conn *PostgresDB) getUser(id int) (*User, error) {
 	u := User{}
 	err := conn.db.QueryRow("select * from customer where id = $1", id).
-		Scan(&u.Id, &u.FirstName, &u.LastName)
+		Scan(&u.Id, &u.FirstName, &u.LastName, &u.Email)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, sql.ErrNoRows
@@ -248,9 +248,7 @@ func ConnectDB() (*PostgresDB, error) {
 func (server *Server) run() {
 	fmt.Println("Service started on port", server.listenAddr)
 	http.Handle("/create", makeHTTPHandler(server.handleCreateUser))
-	// needs updating
 	http.Handle("/getUsers", makeHTTPHandler(server.handleGetAllUsers))
-	// needs updating
 	http.Handle("/getUser", makeHTTPHandler(server.handleGetUser))
 	http.Handle("/updateEmail", makeHTTPHandler(server.handleUpdateEmail))
 	// http.Handle("/delete", makeHTTPHandler(server.handleDeleteUser))
