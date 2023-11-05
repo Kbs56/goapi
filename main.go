@@ -220,6 +220,53 @@ func (conn *PostgresDB) updateEmail(u *User) (*User, error) {
 	return u, nil
 }
 
+func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != http.MethodDelete {
+		return writeJSON(
+			w,
+			http.StatusBadRequest,
+			apiError{Err: fmt.Sprintf("Method %s not allowed for endpoint /delete", r.Method)},
+		)
+	}
+	id, err := strconv.Atoi(r.URL.Query().Get("id"))
+	if err != nil {
+		return writeJSON(
+			w,
+			http.StatusBadRequest,
+			apiError{Err: "Please ensure you are passing in a valid ID"},
+		)
+	}
+	err = s.pgdb.deleteUser(id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return writeJSON(
+				w,
+				http.StatusBadRequest,
+				apiError{Err: fmt.Sprintf("No user with id %d", id)},
+			)
+		}
+		return writeJSON(
+			w,
+			http.StatusInternalServerError,
+			apiError{Err: "Error deleting user"},
+		)
+	}
+	return writeJSON(w, http.StatusNoContent, nil)
+}
+
+func (conn *PostgresDB) deleteUser(id int) error {
+	sqlStatement := fmt.Sprintf("DELETE FROM CUSTOMER WHERE ID = %d", id)
+	res, err := conn.db.Exec(sqlStatement)
+	if err != nil {
+		return err
+	}
+	numRows, err := res.RowsAffected()
+	if numRows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func ConnectDB() (*PostgresDB, error) {
 	psqlInfo := fmt.Sprintf(
 		"host=%s port=%s user=%s "+
@@ -251,7 +298,7 @@ func (server *Server) run() {
 	http.Handle("/getUsers", makeHTTPHandler(server.handleGetAllUsers))
 	http.Handle("/getUser", makeHTTPHandler(server.handleGetUser))
 	http.Handle("/updateEmail", makeHTTPHandler(server.handleUpdateEmail))
-	// http.Handle("/delete", makeHTTPHandler(server.handleDeleteUser))
+	http.Handle("/delete", makeHTTPHandler(server.handleDeleteUser))
 	http.ListenAndServe(server.listenAddr, nil)
 }
 
