@@ -122,9 +122,10 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) error 
 
 func (conn *PostgresDB) createUser(u *User) (*User, error) {
 	sqlStatement := fmt.Sprintf(
-		"INSERT INTO CUSTOMER (FIRST_NAME, LAST_NAME) VALUES ('%s', '%s') RETURNING ID",
+		"INSERT INTO CUSTOMER (FIRST_NAME, LAST_NAME, EMAIL) VALUES ('%s', '%s', '%s') RETURNING ID",
 		u.FirstName,
 		u.LastName,
+		u.Email,
 	)
 	var id int
 	if err := conn.db.QueryRow(sqlStatement).Scan(&id); err != nil {
@@ -247,7 +248,9 @@ func ConnectDB() (*PostgresDB, error) {
 func (server *Server) run() {
 	fmt.Println("Service started on port", server.listenAddr)
 	http.Handle("/create", makeHTTPHandler(server.handleCreateUser))
+	// needs updating
 	http.Handle("/getUsers", makeHTTPHandler(server.handleGetAllUsers))
+	// needs updating
 	http.Handle("/getUser", makeHTTPHandler(server.handleGetUser))
 	http.Handle("/updateEmail", makeHTTPHandler(server.handleUpdateEmail))
 	// http.Handle("/delete", makeHTTPHandler(server.handleDeleteUser))
